@@ -78,6 +78,14 @@ class InstallScriptRepositoryTest(unittest.TestCase):
         )
         self.assertNotIn("open-software-network/agent-skills", readme)
 
+    def test_readme_documents_skills_cli_install(self):
+        readme = README_PATH.read_text()
+
+        self.assertIn(
+            "npx skills add open-software-network/skills --skill os-platform --agent codex --global",
+            readme,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

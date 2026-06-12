@@ -4,7 +4,14 @@ Agent skills for working with Open Software.
 
 ## Install
 
-Install the `os-platform` skill into your local Codex skills directory:
+Install the `os-platform` skill into your global Codex skills directory with the
+Skills CLI:
+
+```bash
+npx skills add open-software-network/skills --skill os-platform --agent codex --global
+```
+
+Or install with the standalone script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/open-software-network/skills/main/skills/os-platform/scripts/install.sh | bash
