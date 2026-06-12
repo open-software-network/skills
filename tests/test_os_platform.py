@@ -86,9 +86,10 @@ class InstallScriptRepositoryTest(unittest.TestCase):
         readme = README_PATH.read_text()
 
         self.assertIn(
-            "npx skills add open-software-network/skills --skill os-platform --agent codex --global",
+            "npx skills add open-software-network/skills --skill os-platform",
             readme,
         )
+        self.assertNotIn("--agent codex --global", readme)
 
     def test_readme_documents_optional_project_config(self):
         readme = README_PATH.read_text()
