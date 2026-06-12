@@ -33,7 +33,9 @@ Use `real_paths` and `fixture_paths` from that response to decide whether a resu
 | `projects list <org>` | `GET /v1/orgs/{org}/projects` |
 | `project get <org> <project>` | `GET /v1/orgs/{org}/projects/{project}` |
 | `issues list <org>` | `GET /v1/orgs/{org}/bounties` |
+| `issues search <org> "<query>"` | `GET /v1/orgs/{org}/bounties`, then local relevance ranking |
 | `issues show <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}` |
+| `issues take <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}`, then `POST /v1/orgs/{org}/bounties/{number}/status` with `{"status":"in_progress"}` |
 | `submissions list <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}/submissions` |
 | `activity list <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}/activity` |
 | `comments list issue <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}/comments` |
@@ -41,9 +43,9 @@ Use `real_paths` and `fixture_paths` from that response to decide whether a resu
 | `contributors show <org> <user>` | `GET /v1/orgs/{org}/contributors/{user}` |
 | `raw GET /v1/...` | Any read-only GET path |
 
-## Issue list filters
+## Issue list and search filters
 
-`issues list <org>` supports these query filters:
+`issues list <org>` and `issues search <org> "<query>"` support these query filters:
 
 - `--cursor`
 - `--per-page`
@@ -62,7 +64,17 @@ Examples:
 ```bash
 python3 scripts/os_platform.py issues list open-software --status todo,in_progress --priority high,urgent
 python3 scripts/os_platform.py issues list open-software --project os-forge --q "wallet"
+python3 scripts/os_platform.py issues search open-software "wallet bug" --status todo --assignee none
+python3 scripts/os_platform.py issues take open-software 123 --yes
 python3 scripts/os_platform.py issues list open-software --labels good-first-issue --sort status_grouped
+```
+
+## Controlled Issue write
+
+`issues take <org> <number>` is the only write command. It fetches the Issue first, refuses non-`todo` Issues, and then moves the Issue to `in_progress` through:
+
+```text
+POST /v1/orgs/{org}/bounties/{number}/status
 ```
 
 ## Language
