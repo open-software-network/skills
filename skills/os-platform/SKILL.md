@@ -12,17 +12,18 @@ Use this skill when the user asks about current Open Software / os-platform stat
 Run commands from this skill directory:
 
 ```bash
-python3 scripts/os_platform.py --base-url "$OS_PLATFORM_API_BASE_URL" status
+python3 scripts/os_platform.py status
 python3 scripts/os_platform.py issues list open-software --q "wallet" --limit 10
 python3 scripts/os_platform.py issues show open-software 123
 ```
 
 Configuration:
 
-- `OS_PLATFORM_API_BASE_URL` is required unless `--base-url` is passed.
+- The default API base URL is `https://app.opensoftware.co/api`.
+- `OS_PLATFORM_API_BASE_URL` can override the default unless `--base-url` is passed.
 - `OS_PLATFORM_API_KEY` is required unless `--api-key` is passed. The script sends it as `Authorization: Bearer ...`.
 - Never ask the user to paste an API key into chat. Ask them to set the environment variable in their shell or agent runtime.
-- The installer does not prompt for or write environment values. If env vars are missing, tell the user to set them first.
+- The installer does not prompt for or write environment values. If the API key is missing, tell the user to set it first.
 
 ## Available Script
 
@@ -50,7 +51,7 @@ Common flags:
 - `--limit N` caps list output.
 - `--json` prints the unwrapped `data` payload.
 - `--full` prints the full unwrapped data without compact summarization.
-- `--base-url URL` overrides `OS_PLATFORM_API_BASE_URL`.
+- `--base-url URL` overrides `OS_PLATFORM_API_BASE_URL` and the default base URL.
 
 `scripts/install.sh` installs this skill into a local agent skills directory. It defaults to `~/.codex/skills`, supports `--dest`, `--source`, `--repo`, `--ref`, `--path`, and `--force`, and never stores credentials.
 
