@@ -41,6 +41,16 @@ Use the user prompt first, then `os-platform.json`, then ask the user for missin
 
 If the user asks for issues and omits org, read `os-platform.json`; if it has `org`, use it. If no org is available, ask the user which org to use before running the script.
 
+## Specific Issue Triage
+
+When the user asks about a specific issue, fetch the live issue first, then inspect the current local codebase before suggesting implementation work.
+
+1. Use `issues show <org> <number>` to get the live issue title, body, labels, project, and status.
+2. Search the local codebase for terms from the issue title/body, related route names, component names, API paths, labels, and project handles.
+3. Compare the issue request with the current implementation, tests, and nearby patterns before recommending work.
+4. Ground suggestions in both the issue data and code references; say when the codebase does not provide enough evidence.
+5. If the issue is actionable, suggest a concise implementation path and likely test or verification commands. If it is not actionable, explain what information is missing.
+
 ## Available Script
 
 `scripts/os_platform.py` is a read-only API helper. It uses only Python standard library modules.
