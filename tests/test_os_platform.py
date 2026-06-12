@@ -224,6 +224,25 @@ class IssueTakeCommandTest(unittest.TestCase):
         self.assertEqual(query, {})
         self.assertEqual(body, {"status": "in_progress"})
 
+    def test_issue_update_request_sets_assignee_user_id(self):
+        method, path, query, body = self.os_platform.issue_update_request(
+            "os-skill",
+            "1",
+            {"assignee_user_id": "usr_self"},
+        )
+
+        self.assertEqual(method, "PATCH")
+        self.assertEqual(path, "/v1/orgs/os-skill/bounties/1")
+        self.assertEqual(query, {})
+        self.assertEqual(body, {"assignee_user_id": "usr_self"})
+
+    def test_current_user_request_reads_me(self):
+        method, path, query = self.os_platform.current_user_request()
+
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/v1/users/me")
+        self.assertEqual(query, {})
+
     def test_take_issue_refuses_non_todo_status(self):
         calls = []
 
@@ -273,7 +292,15 @@ class IssueTakeCommandTest(unittest.TestCase):
         def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
             calls.append((method, path, body))
             if method == "GET":
-                return {"success": True, "data": {"external_id": "OS2-1", "status": "todo", "title": "Take me"}}
+                return {
+                    "success": True,
+                    "data": {
+                        "external_id": "OS2-1",
+                        "status": "todo",
+                        "title": "Take me",
+                        "assignee_user_id": "usr_someone",
+                    },
+                }
             return {"success": True, "data": {"external_id": "OS2-1", "status": "in_progress"}}
 
         result = self.os_platform.take_issue(
@@ -296,7 +323,15 @@ class IssueTakeCommandTest(unittest.TestCase):
         def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
             calls.append((method, path, body))
             if method == "GET":
-                return {"success": True, "data": {"external_id": "OS2-1", "status": "todo", "title": "Take me"}}
+                return {
+                    "success": True,
+                    "data": {
+                        "external_id": "OS2-1",
+                        "status": "todo",
+                        "title": "Take me",
+                        "assignee_user_id": "usr_someone",
+                    },
+                }
             return {"success": True, "data": {"external_id": "OS2-1", "status": "in_progress"}}
 
         result = self.os_platform.take_issue(
@@ -311,6 +346,94 @@ class IssueTakeCommandTest(unittest.TestCase):
         )
 
         self.assertEqual(len(calls), 2)
+        self.assertEqual(result["status"], "in_progress")
+
+    def test_take_issue_assigns_current_user_before_status_when_unassigned(self):
+        calls = []
+
+        def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
+            calls.append((method, path, body))
+            if method == "GET" and path.endswith("/bounties/1"):
+                return {
+                    "success": True,
+                    "data": {
+                        "external_id": "OS2-1",
+                        "status": "todo",
+                        "title": "Take me",
+                        "assignee": None,
+                        "assignee_user_id": None,
+                    },
+                }
+            if method == "GET" and path == "/v1/users/me":
+                return {"success": True, "data": {"public_id": "usr_self", "handle": "me"}}
+            if method == "PATCH":
+                return {
+                    "success": True,
+                    "data": {
+                        "external_id": "OS2-1",
+                        "status": "todo",
+                        "assignee_user_id": "usr_self",
+                    },
+                }
+            return {"success": True, "data": {"external_id": "OS2-1", "status": "in_progress"}}
+
+        result = self.os_platform.take_issue(
+            "os-skill",
+            "1",
+            base_url="https://example.test/api",
+            api_key="secret",
+            timeout=30,
+            assume_yes=True,
+            request=fake_request,
+            confirm=lambda _: False,
+        )
+
+        self.assertEqual(
+            calls,
+            [
+                ("GET", "/v1/orgs/os-skill/bounties/1", None),
+                ("GET", "/v1/users/me", None),
+                ("PATCH", "/v1/orgs/os-skill/bounties/1", {"assignee_user_id": "usr_self"}),
+                ("POST", "/v1/orgs/os-skill/bounties/1/status", {"status": "in_progress"}),
+            ],
+        )
+        self.assertEqual(result["status"], "in_progress")
+
+    def test_take_issue_keeps_existing_assignee(self):
+        calls = []
+
+        def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
+            calls.append((method, path, body))
+            if method == "GET":
+                return {
+                    "success": True,
+                    "data": {
+                        "external_id": "OS2-1",
+                        "status": "todo",
+                        "title": "Take me",
+                        "assignee_user_id": "usr_someone",
+                    },
+                }
+            return {"success": True, "data": {"external_id": "OS2-1", "status": "in_progress"}}
+
+        result = self.os_platform.take_issue(
+            "os-skill",
+            "1",
+            base_url="https://example.test/api",
+            api_key="secret",
+            timeout=30,
+            assume_yes=True,
+            request=fake_request,
+            confirm=lambda _: False,
+        )
+
+        self.assertEqual(
+            calls,
+            [
+                ("GET", "/v1/orgs/os-skill/bounties/1", None),
+                ("POST", "/v1/orgs/os-skill/bounties/1/status", {"status": "in_progress"}),
+            ],
+        )
         self.assertEqual(result["status"], "in_progress")
 
 

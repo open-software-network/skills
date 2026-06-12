@@ -497,6 +497,16 @@ def take_issue(
             "status": issue.get("status"),
         }
 
+    if not issue_has_assignee(issue):
+        assign_issue_to_current_user(
+            org,
+            number,
+            base_url=base_url,
+            api_key=api_key,
+            timeout=timeout,
+            request=request,
+        )
+
     post_method, post_path, post_query, body = issue_status_request(org, number, "in_progress")
     updated_payload = request(
         post_method,
@@ -594,6 +604,80 @@ def issue_status_request(org: str, number: str, status: str) -> tuple[str, str, 
     org_ref = urllib.parse.quote(require_text(org, "org"))
     number_ref = urllib.parse.quote(require_text(number, "issue number"))
     return "POST", f"/v1/orgs/{org_ref}/bounties/{number_ref}/status", {}, {"status": status}
+
+
+def issue_update_request(
+    org: str,
+    number: str,
+    body: Mapping[str, Any],
+) -> tuple[str, str, dict[str, Any], dict[str, Any]]:
+    org_ref = urllib.parse.quote(require_text(org, "org"))
+    number_ref = urllib.parse.quote(require_text(number, "issue number"))
+    return "PATCH", f"/v1/orgs/{org_ref}/bounties/{number_ref}", {}, dict(body)
+
+
+def current_user_request() -> tuple[str, str, dict[str, Any]]:
+    return "GET", "/v1/users/me", {}
+
+
+def issue_has_assignee(issue: Mapping[str, Any]) -> bool:
+    if issue.get("assignee_user_id"):
+        return True
+    assignee = issue.get("assignee")
+    return assignee is not None
+
+
+def current_user_public_id(
+    *,
+    base_url: str,
+    api_key: str,
+    timeout: int,
+    request: Any = request_json,
+) -> str:
+    method, path, query = current_user_request()
+    payload = request(
+        method,
+        path,
+        base_url=base_url,
+        api_key=api_key,
+        query=query,
+        timeout=timeout,
+    )
+    user = unwrap_envelope(payload)
+    if not isinstance(user, Mapping):
+        raise OsPlatformError("current user response did not contain an object")
+    public_id = user.get("public_id")
+    if not isinstance(public_id, str) or not public_id.strip():
+        raise OsPlatformError("current user response did not contain public_id")
+    return public_id
+
+
+def assign_issue_to_current_user(
+    org: str,
+    number: str,
+    *,
+    base_url: str,
+    api_key: str,
+    timeout: int,
+    request: Any = request_json,
+) -> Any:
+    user_id = current_user_public_id(
+        base_url=base_url,
+        api_key=api_key,
+        timeout=timeout,
+        request=request,
+    )
+    method, path, query, body = issue_update_request(org, number, {"assignee_user_id": user_id})
+    payload = request(
+        method,
+        path,
+        base_url=base_url,
+        api_key=api_key,
+        query=query,
+        timeout=timeout,
+        body=body,
+    )
+    return unwrap_envelope(payload)
 
 
 def command_to_request(args: argparse.Namespace) -> tuple[str, str, dict[str, Any]]:

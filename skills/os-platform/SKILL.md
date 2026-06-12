@@ -30,7 +30,7 @@ Configuration:
 
 ## Routing Rules
 
-The script is deterministic. Most commands are read-only; `issues take` is the only controlled write command and moves a `todo` Issue to `in_progress` after confirmation or `--yes`. Do not rely on the script to decide user intent. Route the request before calling it.
+The script is deterministic. Most commands are read-only; `issues take` is the only controlled write command and moves a `todo` Issue to `in_progress` after confirmation or `--yes`. If the Issue has no assignee, `issues take` first assigns it to the authenticated API user. Do not rely on the script to decide user intent. Route the request before calling it.
 
 Use the user prompt first, then `os-platform.json`, then ask the user for missing required parameters. Do not guess an org, issue number, project, or contributor when the prompt and config do not provide one.
 
@@ -91,6 +91,7 @@ Common flags:
 
 - Fetches the Issue first.
 - Refuses to update unless the current status is `todo`.
+- Assigns the Issue to the authenticated API user first when the Issue has no assignee.
 - Prompts before moving the Issue to `in_progress`, unless `--yes` is passed.
 
 `scripts/install.sh` installs this skill into a local agent skills directory. It defaults to `~/.codex/skills`, supports `--dest`, `--source`, `--repo`, `--ref`, `--path`, and `--force`, and never stores credentials.

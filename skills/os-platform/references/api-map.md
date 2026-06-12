@@ -35,7 +35,7 @@ Use `real_paths` and `fixture_paths` from that response to decide whether a resu
 | `issues list <org>` | `GET /v1/orgs/{org}/bounties` |
 | `issues search <org> "<query>"` | `GET /v1/orgs/{org}/bounties`, then local relevance ranking |
 | `issues show <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}` |
-| `issues take <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}`, then `POST /v1/orgs/{org}/bounties/{number}/status` with `{"status":"in_progress"}` |
+| `issues take <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}`; if unassigned, `GET /v1/users/me` and `PATCH /v1/orgs/{org}/bounties/{number}` with `{"assignee_user_id":"usr_xxx"}`; then `POST /v1/orgs/{org}/bounties/{number}/status` with `{"status":"in_progress"}` |
 | `submissions list <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}/submissions` |
 | `activity list <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}/activity` |
 | `comments list issue <org> <number>` | `GET /v1/orgs/{org}/bounties/{number}/comments` |
@@ -71,10 +71,24 @@ python3 scripts/os_platform.py issues list open-software --labels good-first-iss
 
 ## Controlled Issue write
 
-`issues take <org> <number>` is the only write command. It fetches the Issue first, refuses non-`todo` Issues, and then moves the Issue to `in_progress` through:
+`issues take <org> <number>` is the only write command. It fetches the Issue first and refuses non-`todo` Issues. When the Issue has no assignee, it reads the authenticated API user through:
+
+```text
+GET /v1/users/me
+```
+
+Then it assigns the Issue to that user through:
+
+```text
+PATCH /v1/orgs/{org}/bounties/{number}
+{"assignee_user_id":"usr_xxx"}
+```
+
+Finally, it moves the Issue to `in_progress` through:
 
 ```text
 POST /v1/orgs/{org}/bounties/{number}/status
+{"status":"in_progress"}
 ```
 
 ## Language
