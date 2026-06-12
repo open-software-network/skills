@@ -206,6 +206,12 @@ def require_arg(args: argparse.Namespace, name: str, description: str) -> str:
     return str(value)
 
 
+def require_text(value: Any, description: str) -> str:
+    if value is None or str(value).strip() == "":
+        die(f"{description} is required")
+    return str(value)
+
+
 def build_url(base_url: str, path: str, query: Mapping[str, Any] | None = None) -> str:
     if not path.startswith("/"):
         path = "/" + path
@@ -222,6 +228,24 @@ def build_url(base_url: str, path: str, query: Mapping[str, Any] | None = None) 
     return f"{base_url}{path}{suffix}"
 
 
+def build_json_request(
+    method: str,
+    url: str,
+    api_key: str,
+    body: Mapping[str, Any] | None = None,
+) -> urllib.request.Request:
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "os-platform-agent-skill/1.0",
+        "Authorization": f"Bearer {api_key}",
+    }
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body, separators=(",", ":")).encode("utf-8")
+    return urllib.request.Request(url, data=data, method=method.upper(), headers=headers)
+
+
 def request_json(
     method: str,
     path: str,
@@ -229,16 +253,11 @@ def request_json(
     base_url: str,
     api_key: str,
     query: Mapping[str, Any] | None = None,
+    body: Mapping[str, Any] | None = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> Any:
     url = build_url(base_url, path, query)
-    headers = {
-        "Accept": "application/json",
-        "User-Agent": "os-platform-agent-skill/1.0",
-    }
-    headers["Authorization"] = f"Bearer {api_key}"
-
-    req = urllib.request.Request(url, method=method.upper(), headers=headers)
+    req = build_json_request(method, url, api_key, body)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             raw = response.read().decode("utf-8")
@@ -437,6 +456,60 @@ def output_data_for_args(data: Any, args: argparse.Namespace) -> Any:
     return data
 
 
+def confirm_take_issue(issue: Mapping[str, Any]) -> bool:
+    label = issue.get("external_id") or issue.get("number_in_org") or "Issue"
+    title = issue.get("title") or ""
+    answer = input(f"Move {label} {title!r} from todo to in_progress? [y/N] ")
+    return answer.strip().lower() in {"y", "yes"}
+
+
+def take_issue(
+    org: str,
+    number: str,
+    *,
+    base_url: str,
+    api_key: str,
+    timeout: int,
+    assume_yes: bool = False,
+    request: Any = request_json,
+    confirm: Any = confirm_take_issue,
+) -> Any:
+    get_method, get_path, get_query = issue_get_request(org, number)
+    payload = request(
+        get_method,
+        get_path,
+        base_url=base_url,
+        api_key=api_key,
+        query=get_query,
+        timeout=timeout,
+    )
+    issue = unwrap_envelope(payload)
+    if not isinstance(issue, Mapping):
+        raise OsPlatformError("issue response did not contain an object")
+    if issue.get("status") != "todo":
+        result = dict(issue)
+        result["take_result"] = "not_todo"
+        return result
+    if not assume_yes and not confirm(issue):
+        return {
+            "take_result": "cancelled",
+            "external_id": issue.get("external_id"),
+            "status": issue.get("status"),
+        }
+
+    post_method, post_path, post_query, body = issue_status_request(org, number, "in_progress")
+    updated_payload = request(
+        post_method,
+        post_path,
+        base_url=base_url,
+        api_key=api_key,
+        query=post_query,
+        timeout=timeout,
+        body=body,
+    )
+    return unwrap_envelope(updated_payload)
+
+
 def print_payload(data: Any, args: argparse.Namespace) -> None:
     data = output_data_for_args(data, args)
     if args.full or args.json:
@@ -511,6 +584,18 @@ def parse_query_pairs(pairs: Sequence[str]) -> dict[str, str]:
     return query
 
 
+def issue_get_request(org: str, number: str) -> tuple[str, str, dict[str, Any]]:
+    org_ref = urllib.parse.quote(require_text(org, "org"))
+    number_ref = urllib.parse.quote(require_text(number, "issue number"))
+    return "GET", f"/v1/orgs/{org_ref}/bounties/{number_ref}", {}
+
+
+def issue_status_request(org: str, number: str, status: str) -> tuple[str, str, dict[str, Any], dict[str, str]]:
+    org_ref = urllib.parse.quote(require_text(org, "org"))
+    number_ref = urllib.parse.quote(require_text(number, "issue number"))
+    return "POST", f"/v1/orgs/{org_ref}/bounties/{number_ref}/status", {}, {"status": status}
+
+
 def command_to_request(args: argparse.Namespace) -> tuple[str, str, dict[str, Any]]:
     if args.resource == "status":
         return "GET", "/v1/_status", {}
@@ -551,8 +636,8 @@ def command_to_request(args: argparse.Namespace) -> tuple[str, str, dict[str, An
                 ],
             )
             return "GET", f"/v1/orgs/{org}/bounties", query
-        number = urllib.parse.quote(require_arg(args, "number", "issue number"))
-        return "GET", f"/v1/orgs/{org}/bounties/{number}", {}
+        number = require_arg(args, "number", "issue number")
+        return issue_get_request(org, number)
 
     if args.resource == "submissions":
         org = urllib.parse.quote(require_arg(args, "org", "org"))
@@ -632,6 +717,9 @@ def build_parser() -> argparse.ArgumentParser:
     issues_search.add_argument("org", nargs="?")
     issues_search.add_argument("search_query")
     add_issue_filters(issues_search)
+    issues_take = leaf_parser(issues_sub, "take", help="Move a todo Issue to in_progress after confirmation.")
+    issues_take.add_argument("refs", nargs="*", metavar="ref")
+    issues_take.add_argument("--yes", action="store_true", help="Skip confirmation prompt.")
     issues_show = leaf_parser(issues_sub, "show", help="Show one Issue by per-Org number.")
     issues_show.add_argument("refs", nargs="*", metavar="ref")
 
@@ -683,6 +771,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     api_key = require_api_key(getattr(args, "api_key", None))
     base_url = normalize_base_url(args.base_url)
     try:
+        if args.resource == "issues" and args.action == "take":
+            data = take_issue(
+                args.org,
+                args.number,
+                base_url=base_url,
+                api_key=api_key,
+                timeout=args.timeout,
+                assume_yes=args.yes,
+            )
+            print_payload(data, args)
+            return 0
+
         method, path, query = command_to_request(args)
         payload = request_json(
             method,

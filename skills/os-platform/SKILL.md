@@ -16,6 +16,7 @@ python3 scripts/os_platform.py status
 python3 scripts/os_platform.py issues list open-software --q "wallet" --limit 10
 python3 scripts/os_platform.py issues search open-software "wallet bug" --status todo
 python3 scripts/os_platform.py issues show open-software 123
+python3 scripts/os_platform.py issues take open-software 123 --yes
 ```
 
 Configuration:
@@ -29,7 +30,7 @@ Configuration:
 
 ## Routing Rules
 
-The script is a deterministic read-only tool; do not rely on it to decide user intent. Route the request before calling it.
+The script is deterministic. Most commands are read-only; `issues take` is the only controlled write command and moves a `todo` Issue to `in_progress` after confirmation or `--yes`. Do not rely on the script to decide user intent. Route the request before calling it.
 
 Use the user prompt first, then `os-platform.json`, then ask the user for missing required parameters. Do not guess an org, issue number, project, or contributor when the prompt and config do not provide one.
 
@@ -38,6 +39,7 @@ Use the user prompt first, then `os-platform.json`, then ask the user for missin
 - Issue lists, filters, or work queues: use `issues list <org>` with the narrowest filters.
 - Issue searches by rough user phrasing: use `issues search <org> "<query>"` with narrow filters when useful.
 - A specific Issue/Bounty by number: use `issues show <org> <number>`.
+- Taking a todo Issue: after the user confirms they want to work on it, use `issues take <org> <number>`; use `--yes` only when confirmation already happened in chat or another trusted workflow.
 - Issue submissions, activity, or comments: use the scoped command with `<org>` and `<issue-number>`.
 - Contributors: use `contributors list <org>` or `contributors show <org> <user-handle>`.
 
@@ -57,7 +59,7 @@ When the user asks about a specific issue, fetch the live issue first, then insp
 
 ## Available Script
 
-`scripts/os_platform.py` is a read-only API helper. It uses only Python standard library modules.
+`scripts/os_platform.py` is primarily a read-only API helper, with one controlled write command for taking an Issue. It uses only Python standard library modules.
 
 Core commands:
 
@@ -69,6 +71,7 @@ python3 scripts/os_platform.py project get <org> <project>
 python3 scripts/os_platform.py issues list <org>
 python3 scripts/os_platform.py issues search <org> "<query>"
 python3 scripts/os_platform.py issues show <org> <number>
+python3 scripts/os_platform.py issues take <org> <number>
 python3 scripts/os_platform.py submissions list <org> <issue-number>
 python3 scripts/os_platform.py activity list <org> <issue-number>
 python3 scripts/os_platform.py comments list issue <org> <issue-number>
@@ -83,6 +86,12 @@ Common flags:
 - `--json` prints the unwrapped `data` payload.
 - `--full` prints the full unwrapped data without compact summarization.
 - `--base-url URL` overrides `OS_PLATFORM_API_BASE_URL` and the default base URL.
+
+`issues take`:
+
+- Fetches the Issue first.
+- Refuses to update unless the current status is `todo`.
+- Prompts before moving the Issue to `in_progress`, unless `--yes` is passed.
 
 `scripts/install.sh` installs this skill into a local agent skills directory. It defaults to `~/.codex/skills`, supports `--dest`, `--source`, `--repo`, `--ref`, `--path`, and `--force`, and never stores credentials.
 
@@ -103,7 +112,7 @@ Common flags:
 
 ## Safety
 
-- The bundled API script is read-only. Do not add mutation commands unless the user explicitly asks for a new version of the skill.
+- The bundled API script is read-only except for `issues take`. Do not add more mutation commands unless the user explicitly asks for a new version of the skill.
 - Do not print or persist `OS_PLATFORM_API_KEY`.
 - Do not infer private data from missing public data. A 404 on private/member-only resources can mean hidden, missing, or inaccessible.
 - Treat production data as current at request time, not as a durable local fact.

@@ -98,12 +98,20 @@ class InstallScriptRepositoryTest(unittest.TestCase):
         self.assertIn('"org": "open-software"', readme)
         self.assertIn('"limit": 20', readme)
 
+    def test_readme_links_api_docs_and_take_command(self):
+        readme = README_PATH.read_text()
+
+        self.assertIn("https://app.opensoftware.co/api/docs", readme)
+        self.assertIn("python3 skills/os-platform/scripts/os_platform.py issues take open-software 123 --yes", readme)
+
     def test_skill_documents_agent_routing_policy(self):
         skill = SKILL_PATH.read_text()
 
         self.assertIn("## Routing Rules", skill)
         self.assertIn("Use the user prompt first, then `os-platform.json`, then ask the user for missing required parameters.", skill)
-        self.assertIn("The script is a deterministic read-only tool; do not rely on it to decide user intent.", skill)
+        self.assertIn("Most commands are read-only; `issues take` is the only controlled write command", skill)
+        self.assertIn("Taking a todo Issue: after the user confirms they want to work on it, use `issues take <org> <number>`", skill)
+        self.assertIn("The bundled API script is read-only except for `issues take`.", skill)
         self.assertIn("When the user asks for issues to work on, prioritize todo issues assigned to the user or with no assignee before other todo issues.", skill)
         self.assertIn("When the user asks about a specific issue, fetch the live issue first, then inspect the current local codebase before suggesting implementation work.", skill)
         self.assertIn("Ground suggestions in both the issue data and code references; say when the codebase does not provide enough evidence.", skill)
@@ -172,6 +180,138 @@ class ProjectConfigTest(unittest.TestCase):
         method, path, _ = self.os_platform.command_to_request(args)
         self.assertEqual(method, "GET")
         self.assertEqual(path, "/v1/orgs/open-software/bounties/123")
+
+
+class RequestJsonBodyTest(unittest.TestCase):
+    def setUp(self):
+        self.os_platform = load_os_platform()
+
+    def test_build_json_request_sets_body_and_content_type(self):
+        request = self.os_platform.build_json_request(
+            "POST",
+            "https://example.test/v1/issues/1/status",
+            "secret",
+            {"status": "in_progress"},
+        )
+
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b'{"status":"in_progress"}')
+        self.assertEqual(request.headers["Content-type"], "application/json")
+        self.assertEqual(request.headers["Authorization"], "Bearer secret")
+
+
+class IssueTakeCommandTest(unittest.TestCase):
+    def setUp(self):
+        self.os_platform = load_os_platform()
+
+    def test_issues_take_uses_config_org_when_only_number_is_supplied(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "take", "1", "--yes"])
+
+        self.os_platform.apply_project_config(args, {"org": "os-skill"})
+
+        method, path, query = self.os_platform.command_to_request(args)
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/v1/orgs/os-skill/bounties/1")
+        self.assertEqual(query, {})
+        self.assertTrue(args.yes)
+
+    def test_issue_status_request_posts_in_progress(self):
+        method, path, query, body = self.os_platform.issue_status_request("os-skill", "1", "in_progress")
+
+        self.assertEqual(method, "POST")
+        self.assertEqual(path, "/v1/orgs/os-skill/bounties/1/status")
+        self.assertEqual(query, {})
+        self.assertEqual(body, {"status": "in_progress"})
+
+    def test_take_issue_refuses_non_todo_status(self):
+        calls = []
+
+        def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
+            calls.append((method, path, body))
+            return {"success": True, "data": {"external_id": "OS2-1", "status": "in_progress"}}
+
+        result = self.os_platform.take_issue(
+            "os-skill",
+            "1",
+            base_url="https://example.test/api",
+            api_key="secret",
+            timeout=30,
+            assume_yes=True,
+            request=fake_request,
+            confirm=lambda _: True,
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result["status"], "in_progress")
+        self.assertEqual(result["take_result"], "not_todo")
+
+    def test_take_issue_cancels_when_confirmation_declines(self):
+        calls = []
+
+        def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
+            calls.append((method, path, body))
+            return {"success": True, "data": {"external_id": "OS2-1", "status": "todo", "title": "Take me"}}
+
+        result = self.os_platform.take_issue(
+            "os-skill",
+            "1",
+            base_url="https://example.test/api",
+            api_key="secret",
+            timeout=30,
+            assume_yes=False,
+            request=fake_request,
+            confirm=lambda _: False,
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result["take_result"], "cancelled")
+
+    def test_take_issue_posts_in_progress_when_confirmed(self):
+        calls = []
+
+        def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
+            calls.append((method, path, body))
+            if method == "GET":
+                return {"success": True, "data": {"external_id": "OS2-1", "status": "todo", "title": "Take me"}}
+            return {"success": True, "data": {"external_id": "OS2-1", "status": "in_progress"}}
+
+        result = self.os_platform.take_issue(
+            "os-skill",
+            "1",
+            base_url="https://example.test/api",
+            api_key="secret",
+            timeout=30,
+            assume_yes=False,
+            request=fake_request,
+            confirm=lambda _: True,
+        )
+
+        self.assertEqual(calls[1], ("POST", "/v1/orgs/os-skill/bounties/1/status", {"status": "in_progress"}))
+        self.assertEqual(result["status"], "in_progress")
+
+    def test_take_issue_posts_in_progress_with_yes(self):
+        calls = []
+
+        def fake_request(method, path, *, base_url, api_key, query=None, timeout=30, body=None):
+            calls.append((method, path, body))
+            if method == "GET":
+                return {"success": True, "data": {"external_id": "OS2-1", "status": "todo", "title": "Take me"}}
+            return {"success": True, "data": {"external_id": "OS2-1", "status": "in_progress"}}
+
+        result = self.os_platform.take_issue(
+            "os-skill",
+            "1",
+            base_url="https://example.test/api",
+            api_key="secret",
+            timeout=30,
+            assume_yes=True,
+            request=fake_request,
+            confirm=lambda _: False,
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result["status"], "in_progress")
 
 
 class IssueSearchCommandTest(unittest.TestCase):
