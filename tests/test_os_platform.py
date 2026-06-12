@@ -1,6 +1,9 @@
 import importlib.util
+import contextlib
+import io
 import os
 import pathlib
+import tempfile
 import unittest
 
 
@@ -13,6 +16,7 @@ SCRIPT_PATH = (
 )
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 INSTALL_SCRIPT_PATH = REPO_ROOT / "skills" / "os-platform" / "scripts" / "install.sh"
+SKILL_PATH = REPO_ROOT / "skills" / "os-platform" / "SKILL.md"
 README_PATH = REPO_ROOT / "README.md"
 
 
@@ -85,6 +89,85 @@ class InstallScriptRepositoryTest(unittest.TestCase):
             "npx skills add open-software-network/skills --skill os-platform --agent codex --global",
             readme,
         )
+
+    def test_readme_documents_optional_project_config(self):
+        readme = README_PATH.read_text()
+
+        self.assertIn("os-platform.json", readme)
+        self.assertIn('"org": "open-software"', readme)
+        self.assertIn('"limit": 20', readme)
+
+    def test_skill_documents_agent_routing_policy(self):
+        skill = SKILL_PATH.read_text()
+
+        self.assertIn("## Routing Rules", skill)
+        self.assertIn("Use the user prompt first, then `os-platform.json`, then ask the user for missing required parameters.", skill)
+        self.assertIn("The script is a deterministic read-only tool; do not rely on it to decide user intent.", skill)
+
+
+class ProjectConfigTest(unittest.TestCase):
+    def setUp(self):
+        self.os_platform = load_os_platform()
+
+    def test_missing_project_config_returns_empty_defaults(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.os_platform.load_project_config(pathlib.Path(temp_dir))
+
+        self.assertEqual(config, {})
+
+    def test_project_config_is_discovered_from_parent_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = pathlib.Path(temp_dir)
+            nested = root / "work" / "repo"
+            nested.mkdir(parents=True)
+            (root / "os-platform.json").write_text('{"org": "open-software", "limit": 7, "ignored": true}')
+
+            config = self.os_platform.load_project_config(nested)
+
+        self.assertEqual(config, {"org": "open-software", "limit": 7})
+
+    def test_project_config_supplies_optional_org_and_limit(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "list"])
+
+        self.os_platform.apply_project_config(args, {"org": "open-software", "limit": 7})
+
+        method, path, query = self.os_platform.command_to_request(args)
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/v1/orgs/open-software/bounties")
+        self.assertEqual(query, {})
+        self.assertEqual(args.limit, 7)
+
+    def test_cli_values_override_project_config(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "list", "other-org", "--limit", "3"])
+
+        self.os_platform.apply_project_config(args, {"org": "open-software", "limit": 7})
+
+        method, path, _ = self.os_platform.command_to_request(args)
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/v1/orgs/other-org/bounties")
+        self.assertEqual(args.limit, 3)
+
+    def test_issues_list_without_org_remains_unresolved_for_agent_routing(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "list"])
+
+        self.os_platform.apply_project_config(args, {})
+
+        self.assertFalse(hasattr(args, "org") and args.org)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.os_platform.command_to_request(args)
+
+    def test_issues_show_uses_config_org_when_only_issue_number_is_supplied(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "show", "123"])
+
+        self.os_platform.apply_project_config(args, {"org": "open-software"})
+
+        method, path, _ = self.os_platform.command_to_request(args)
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/v1/orgs/open-software/bounties/123")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import sys
 import textwrap
 import urllib.error
@@ -18,6 +19,7 @@ from typing import Any
 DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_LIMIT = 20
 DEFAULT_BASE_URL = "https://app.opensoftware.co/api"
+CONFIG_FILE_NAME = "os-platform.json"
 API_KEY_ENV = "OS_PLATFORM_API_KEY"
 BASE_URL_ENV = "OS_PLATFORM_API_BASE_URL"
 
@@ -109,6 +111,97 @@ def normalize_base_url(base_url: str | None) -> str:
     if not value.startswith(("http://", "https://")):
         die("base URL must start with http:// or https://")
     return value.rstrip("/")
+
+
+def load_project_config(start_dir: pathlib.Path | str | None = None) -> dict[str, Any]:
+    path = pathlib.Path(start_dir) if start_dir is not None else pathlib.Path.cwd()
+    if path.is_file():
+        path = path.parent
+
+    for directory in (path, *path.parents):
+        config_path = directory / CONFIG_FILE_NAME
+        if not config_path.is_file():
+            continue
+        try:
+            payload = json.loads(config_path.read_text())
+        except json.JSONDecodeError as exc:
+            die(f"{config_path} contains invalid JSON: {exc.msg}")
+        if not isinstance(payload, dict):
+            die(f"{config_path} must contain a JSON object")
+
+        config: dict[str, Any] = {}
+        org = payload.get("org")
+        if isinstance(org, str) and org.strip():
+            config["org"] = org.strip()
+        limit = payload.get("limit")
+        if isinstance(limit, int):
+            config["limit"] = limit
+        return config
+
+    return {}
+
+
+def apply_project_config(
+    args: argparse.Namespace,
+    config: Mapping[str, Any],
+) -> None:
+    configured_org = config.get("org")
+    if isinstance(configured_org, str) and configured_org.strip():
+        if not getattr(args, "org", None):
+            args.org = configured_org.strip()
+
+    configured_limit = config.get("limit")
+    if getattr(args, "limit", None) is None:
+        args.limit = configured_limit if isinstance(configured_limit, int) else DEFAULT_LIMIT
+
+    refs = list(getattr(args, "refs", []) or [])
+    if refs:
+        apply_scoped_refs(
+            args,
+            refs,
+            configured_org if isinstance(configured_org, str) else None,
+        )
+
+
+def apply_scoped_refs(
+    args: argparse.Namespace,
+    refs: Sequence[str],
+    configured_org: str | None,
+) -> None:
+    if len(refs) > 2:
+        die("too many positional values; pass either <org> <value> or configure org and pass <value>")
+
+    if len(refs) == 2:
+        args.org = refs[0]
+        set_scoped_target(args, refs[1])
+        return
+
+    if len(refs) == 1:
+        if configured_org:
+            args.org = configured_org
+            set_scoped_target(args, refs[0])
+        else:
+            args.org = refs[0]
+
+
+def set_scoped_target(args: argparse.Namespace, value: str) -> None:
+    if args.resource == "project":
+        args.project = value
+    elif args.resource in {"issues", "submissions", "activity"}:
+        args.number = value
+    elif args.resource == "comments":
+        args.number = value
+    elif args.resource == "contributors":
+        args.user_handle = value
+
+
+def require_arg(args: argparse.Namespace, name: str, description: str) -> str:
+    value = getattr(args, name, None)
+    if value is None or str(value).strip() == "":
+        if name == "org":
+            die(f"{description} is required; pass it on the command line or set org in {CONFIG_FILE_NAME}")
+        die(f"{description} is required")
+    return str(value)
 
 
 def build_url(base_url: str, path: str, query: Mapping[str, Any] | None = None) -> str:
@@ -257,7 +350,7 @@ def print_payload(data: Any, args: argparse.Namespace) -> None:
 def add_common_flags(parser: argparse.ArgumentParser, *, suppress_defaults: bool = False) -> None:
     default = argparse.SUPPRESS if suppress_defaults else None
     timeout_default = argparse.SUPPRESS if suppress_defaults else DEFAULT_TIMEOUT_SECONDS
-    limit_default = argparse.SUPPRESS if suppress_defaults else DEFAULT_LIMIT
+    limit_default = argparse.SUPPRESS if suppress_defaults else None
     bool_default = argparse.SUPPRESS if suppress_defaults else False
     parser.add_argument(
         "--base-url",
@@ -324,19 +417,21 @@ def command_to_request(args: argparse.Namespace) -> tuple[str, str, dict[str, An
         return "GET", "/v1/_status", {}
 
     if args.resource == "org":
-        return "GET", f"/v1/orgs/{urllib.parse.quote(args.org)}", {}
+        org = require_arg(args, "org", "org")
+        return "GET", f"/v1/orgs/{urllib.parse.quote(org)}", {}
 
     if args.resource == "projects":
+        org = require_arg(args, "org", "org")
         query = query_from_args(args, ["page", "per_page", "sort", "q"])
-        return "GET", f"/v1/orgs/{urllib.parse.quote(args.org)}/projects", query
+        return "GET", f"/v1/orgs/{urllib.parse.quote(org)}/projects", query
 
     if args.resource == "project":
-        org = urllib.parse.quote(args.org)
-        project = urllib.parse.quote(args.project)
+        org = urllib.parse.quote(require_arg(args, "org", "org"))
+        project = urllib.parse.quote(require_arg(args, "project", "project"))
         return "GET", f"/v1/orgs/{org}/projects/{project}", {}
 
     if args.resource == "issues":
-        org = urllib.parse.quote(args.org)
+        org = urllib.parse.quote(require_arg(args, "org", "org"))
         if args.action == "list":
             query = query_from_args(
                 args,
@@ -355,30 +450,31 @@ def command_to_request(args: argparse.Namespace) -> tuple[str, str, dict[str, An
                 ],
             )
             return "GET", f"/v1/orgs/{org}/bounties", query
-        return "GET", f"/v1/orgs/{org}/bounties/{urllib.parse.quote(str(args.number))}", {}
+        number = urllib.parse.quote(require_arg(args, "number", "issue number"))
+        return "GET", f"/v1/orgs/{org}/bounties/{number}", {}
 
     if args.resource == "submissions":
-        org = urllib.parse.quote(args.org)
-        number = urllib.parse.quote(str(args.number))
+        org = urllib.parse.quote(require_arg(args, "org", "org"))
+        number = urllib.parse.quote(require_arg(args, "number", "issue number"))
         return "GET", f"/v1/orgs/{org}/bounties/{number}/submissions", {}
 
     if args.resource == "activity":
-        org = urllib.parse.quote(args.org)
-        number = urllib.parse.quote(str(args.number))
+        org = urllib.parse.quote(require_arg(args, "org", "org"))
+        number = urllib.parse.quote(require_arg(args, "number", "issue number"))
         query = query_from_args(args, ["page", "per_page"])
         return "GET", f"/v1/orgs/{org}/bounties/{number}/activity", query
 
     if args.resource == "comments":
-        org = urllib.parse.quote(args.org)
-        number = urllib.parse.quote(str(args.number))
+        org = urllib.parse.quote(require_arg(args, "org", "org"))
+        number = urllib.parse.quote(require_arg(args, "number", "issue number"))
         query = query_from_args(args, ["page", "per_page"])
         return "GET", f"/v1/orgs/{org}/bounties/{number}/comments", query
 
     if args.resource == "contributors":
-        org = urllib.parse.quote(args.org)
+        org = urllib.parse.quote(require_arg(args, "org", "org"))
         if args.action == "list":
             return "GET", f"/v1/orgs/{org}/contributors", {}
-        user = urllib.parse.quote(args.user_handle)
+        user = urllib.parse.quote(require_arg(args, "user_handle", "user handle"))
         return "GET", f"/v1/orgs/{org}/contributors/{user}", {}
 
     if args.resource == "raw":
@@ -410,12 +506,12 @@ def build_parser() -> argparse.ArgumentParser:
     org = subparsers.add_parser("org", help="Org reads.")
     org_sub = org.add_subparsers(dest="action", required=True)
     org_get = leaf_parser(org_sub, "get", help="Get an Org by handle or public id.")
-    org_get.add_argument("org")
+    org_get.add_argument("org", nargs="?")
 
     projects = subparsers.add_parser("projects", help="Project collection reads.")
     projects_sub = projects.add_subparsers(dest="action", required=True)
     projects_list = leaf_parser(projects_sub, "list", help="List Projects for an Org.")
-    projects_list.add_argument("org")
+    projects_list.add_argument("org", nargs="?")
     projects_list.add_argument("--page", type=int)
     projects_list.add_argument("--per-page", type=int, dest="per_page")
     projects_list.add_argument("--sort")
@@ -424,29 +520,25 @@ def build_parser() -> argparse.ArgumentParser:
     project = subparsers.add_parser("project", help="Project detail reads.")
     project_sub = project.add_subparsers(dest="action", required=True)
     project_get = leaf_parser(project_sub, "get", help="Get one Project.")
-    project_get.add_argument("org")
-    project_get.add_argument("project")
+    project_get.add_argument("refs", nargs="*", metavar="ref")
 
     issues = subparsers.add_parser("issues", help="Issue/Bounty reads.")
     issues_sub = issues.add_subparsers(dest="action", required=True)
     issues_list = leaf_parser(issues_sub, "list", help="List Issues for an Org.")
-    issues_list.add_argument("org")
+    issues_list.add_argument("org", nargs="?")
     add_issue_filters(issues_list)
     issues_show = leaf_parser(issues_sub, "show", help="Show one Issue by per-Org number.")
-    issues_show.add_argument("org")
-    issues_show.add_argument("number")
+    issues_show.add_argument("refs", nargs="*", metavar="ref")
 
     submissions = subparsers.add_parser("submissions", help="Submission reads.")
     submissions_sub = submissions.add_subparsers(dest="action", required=True)
     submissions_list = leaf_parser(submissions_sub, "list", help="List Submissions for an Issue.")
-    submissions_list.add_argument("org")
-    submissions_list.add_argument("number")
+    submissions_list.add_argument("refs", nargs="*", metavar="ref")
 
     activity = subparsers.add_parser("activity", help="Issue activity reads.")
     activity_sub = activity.add_subparsers(dest="action", required=True)
     activity_list = leaf_parser(activity_sub, "list", help="List activity for an Issue.")
-    activity_list.add_argument("org")
-    activity_list.add_argument("number")
+    activity_list.add_argument("refs", nargs="*", metavar="ref")
     activity_list.add_argument("--page", type=int)
     activity_list.add_argument("--per-page", type=int, dest="per_page")
 
@@ -455,18 +547,16 @@ def build_parser() -> argparse.ArgumentParser:
     comments_list = comments_sub.add_parser("list", help="List comments.")
     comments_list_sub = comments_list.add_subparsers(dest="target", required=True)
     issue_comments = leaf_parser(comments_list_sub, "issue", help="List comments for an Issue.")
-    issue_comments.add_argument("org")
-    issue_comments.add_argument("number")
+    issue_comments.add_argument("refs", nargs="*", metavar="ref")
     issue_comments.add_argument("--page", type=int)
     issue_comments.add_argument("--per-page", type=int, dest="per_page")
 
     contributors = subparsers.add_parser("contributors", help="Contributor reads.")
     contributors_sub = contributors.add_subparsers(dest="action", required=True)
     contributors_list = leaf_parser(contributors_sub, "list", help="List Org contributors.")
-    contributors_list.add_argument("org")
+    contributors_list.add_argument("org", nargs="?")
     contributors_show = leaf_parser(contributors_sub, "show", help="Show one Org contributor.")
-    contributors_show.add_argument("org")
-    contributors_show.add_argument("user_handle")
+    contributors_show.add_argument("refs", nargs="*", metavar="ref")
 
     raw = leaf_parser(subparsers, "raw", help="Raw read-only request escape hatch.")
     raw.add_argument("method", choices=["GET", "get"])
@@ -479,6 +569,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    apply_project_config(args, load_project_config())
     if args.limit < 1:
         die("--limit must be greater than zero")
     if args.timeout < 1:

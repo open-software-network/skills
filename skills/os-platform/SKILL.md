@@ -22,8 +22,24 @@ Configuration:
 - The default API base URL is `https://app.opensoftware.co/api`.
 - `OS_PLATFORM_API_BASE_URL` can override the default unless `--base-url` is passed.
 - `OS_PLATFORM_API_KEY` is required unless `--api-key` is passed. The script sends it as `Authorization: Bearer ...`.
+- Optional project defaults can be stored in `os-platform.json` in the workspace root or a parent directory. Supported fields are `org` and `limit`; both are optional.
 - Never ask the user to paste an API key into chat. Ask them to set the environment variable in their shell or agent runtime.
 - The installer does not prompt for or write environment values. If the API key is missing, tell the user to set it first.
+
+## Routing Rules
+
+The script is a deterministic read-only tool; do not rely on it to decide user intent. Route the request before calling it.
+
+Use the user prompt first, then `os-platform.json`, then ask the user for missing required parameters. Do not guess an org, issue number, project, or contributor when the prompt and config do not provide one.
+
+- Org state or details: use `org get <org>`.
+- Project lists or details: use `projects list <org>` or `project get <org> <project>`.
+- Issue lists, searches, filters, or work queues: use `issues list <org>` with the narrowest filters.
+- A specific Issue/Bounty by number: use `issues show <org> <number>`.
+- Issue submissions, activity, or comments: use the scoped command with `<org>` and `<issue-number>`.
+- Contributors: use `contributors list <org>` or `contributors show <org> <user-handle>`.
+
+If the user asks for issues and omits org, read `os-platform.json`; if it has `org`, use it. If no org is available, ask the user which org to use before running the script.
 
 ## Available Script
 

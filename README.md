@@ -50,3 +50,15 @@ Optionally override the API base URL:
 ```bash
 export OS_PLATFORM_API_BASE_URL="https://..."
 ```
+
+Optional project defaults can live in `os-platform.json` at the root of a
+workspace:
+
+```json
+{
+  "org": "open-software",
+  "limit": 20
+}
+```
+
+Both fields are optional. Do not store API keys in this file.
