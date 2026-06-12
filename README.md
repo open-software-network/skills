@@ -7,7 +7,7 @@ Agent skills for working with Open Software.
 Install the `os-platform` skill into your local Codex skills directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/open-software-network/agent-skills/main/skills/os-platform/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/open-software-network/skills/main/skills/os-platform/scripts/install.sh | bash
 ```
 
 Or install from a local checkout:

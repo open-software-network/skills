@@ -3,7 +3,7 @@ set -euo pipefail
 
 SKILL_NAME="os-platform"
 DEFAULT_DEST="${CODEX_HOME:-$HOME/.codex}/skills"
-DEFAULT_REPO="open-software-network/agent-skills"
+DEFAULT_REPO="open-software-network/skills"
 DEFAULT_REF="main"
 DEFAULT_PATH="skills/os-platform"
 
@@ -32,15 +32,15 @@ Usage:
 Options:
   --dest DIR       Destination skills directory. Default: ${CODEX_HOME:-$HOME/.codex}/skills
   --source DIR     Local os-platform skill directory to install from.
-  --repo ORG/REPO  GitHub repo for download mode. Default: open-software-network/agent-skills
+  --repo ORG/REPO  GitHub repo for download mode. Default: open-software-network/skills
   --ref REF        Git ref for download mode. Default: main
   --path PATH      Skill path inside repo. Default: skills/os-platform
   --force          Replace an existing destination skill.
   -h, --help       Show this help.
 
 Examples:
-  bash scripts/install.sh --source ./agent-skills/os-platform --dest /tmp/skills --force
-  curl -fsSL https://raw.githubusercontent.com/open-software-network/agent-skills/main/skills/os-platform/scripts/install.sh | bash
+  bash scripts/install.sh --source ./skills/os-platform --dest /tmp/skills --force
+  curl -fsSL https://raw.githubusercontent.com/open-software-network/skills/main/skills/os-platform/scripts/install.sh | bash
 USAGE
 }
 

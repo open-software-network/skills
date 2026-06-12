@@ -11,6 +11,9 @@ SCRIPT_PATH = (
     / "scripts"
     / "os_platform.py"
 )
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+INSTALL_SCRIPT_PATH = REPO_ROOT / "skills" / "os-platform" / "scripts" / "install.sh"
+README_PATH = REPO_ROOT / "README.md"
 
 
 def load_os_platform():
@@ -53,6 +56,27 @@ class NormalizeBaseUrlTest(unittest.TestCase):
             self.os_platform.normalize_base_url("https://override.test/api/"),
             "https://override.test/api",
         )
+
+
+class InstallScriptRepositoryTest(unittest.TestCase):
+    def test_installer_defaults_to_current_skills_repo(self):
+        install_script = INSTALL_SCRIPT_PATH.read_text()
+
+        self.assertIn('DEFAULT_REPO="open-software-network/skills"', install_script)
+        self.assertIn(
+            "https://raw.githubusercontent.com/open-software-network/skills/main/skills/os-platform/scripts/install.sh",
+            install_script,
+        )
+        self.assertNotIn("open-software-network/agent-skills", install_script)
+
+    def test_readme_installer_url_uses_current_skills_repo(self):
+        readme = README_PATH.read_text()
+
+        self.assertIn(
+            "https://raw.githubusercontent.com/open-software-network/skills/main/skills/os-platform/scripts/install.sh",
+            readme,
+        )
+        self.assertNotIn("open-software-network/agent-skills", readme)
 
 
 if __name__ == "__main__":
