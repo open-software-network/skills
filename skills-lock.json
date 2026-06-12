@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "os-platform": {
+      "source": "open-software-network/skills",
+      "sourceType": "github",
+      "skillPath": "skills/os-platform/SKILL.md",
+      "computedHash": "6601903ecc962ba67b6af9426e9d268f5bc9fd919d5ddb3b0e4e17ff967fe565"
+    }
+  }
+}
