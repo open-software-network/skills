@@ -30,6 +30,12 @@ production API instead of relying on stale docs, fixtures, or screenshots.
 It can read current Orgs, Projects, Issues, Submissions, Comments, Activity,
 Contributors, and API status.
 
+API reference:
+
+```text
+https://app.opensoftware.co/api/docs
+```
+
 Example Issue commands:
 
 ```bash
