@@ -156,7 +156,9 @@ Installed $SKILL_NAME skill to:
   $TARGET
 
 This installer does not prompt for or store production credentials.
+The default API base URL is https://app.opensoftware.co/api.
 Set production access in the agent runtime or shell before using the skill:
-  export OS_PLATFORM_API_BASE_URL="https://..."
   export OS_PLATFORM_API_KEY="..."
+Optionally override the API base URL:
+  export OS_PLATFORM_API_BASE_URL="https://..."
 EOF

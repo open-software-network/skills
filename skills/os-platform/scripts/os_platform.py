@@ -17,6 +17,7 @@ from typing import Any
 
 DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_LIMIT = 20
+DEFAULT_BASE_URL = "https://app.opensoftware.co/api"
 API_KEY_ENV = "OS_PLATFORM_API_KEY"
 BASE_URL_ENV = "OS_PLATFORM_API_BASE_URL"
 
@@ -104,12 +105,7 @@ def require_api_key(api_key: str | None) -> str:
 
 
 def normalize_base_url(base_url: str | None) -> str:
-    value = (base_url or os.environ.get(BASE_URL_ENV) or "").strip()
-    if not value:
-        die(
-            f"{BASE_URL_ENV} is not set. Set it first to make os-platform work, "
-            "or pass --base-url https://..."
-        )
+    value = (base_url or os.environ.get(BASE_URL_ENV) or DEFAULT_BASE_URL).strip()
     if not value.startswith(("http://", "https://")):
         die("base URL must start with http:// or https://")
     return value.rstrip("/")
@@ -263,7 +259,11 @@ def add_common_flags(parser: argparse.ArgumentParser, *, suppress_defaults: bool
     timeout_default = argparse.SUPPRESS if suppress_defaults else DEFAULT_TIMEOUT_SECONDS
     limit_default = argparse.SUPPRESS if suppress_defaults else DEFAULT_LIMIT
     bool_default = argparse.SUPPRESS if suppress_defaults else False
-    parser.add_argument("--base-url", default=default, help=f"API base URL. Defaults to ${BASE_URL_ENV}.")
+    parser.add_argument(
+        "--base-url",
+        default=default,
+        help=f"API base URL. Defaults to ${BASE_URL_ENV} or {DEFAULT_BASE_URL}.",
+    )
     parser.add_argument("--api-key", default=default, help=f"API key. Prefer ${API_KEY_ENV}; this flag is not printed.")
     parser.add_argument("--timeout", type=int, default=timeout_default, help="HTTP timeout in seconds.")
     parser.add_argument("--limit", type=int, default=limit_default, help="Maximum list items in compact output.")

@@ -1,6 +1,6 @@
 # os-platform API Map
 
-Use this map when the command shape is unclear. All routes are prefixed by `OS_PLATFORM_API_BASE_URL`.
+Use this map when the command shape is unclear. All routes are prefixed by the configured API base URL. By default, the bundled helper uses `https://app.opensoftware.co/api`; `OS_PLATFORM_API_BASE_URL` and `--base-url` can override it.
 
 ## Authentication
 
