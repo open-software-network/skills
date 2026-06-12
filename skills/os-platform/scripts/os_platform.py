@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import sys
 import textwrap
 import urllib.error
@@ -22,6 +23,7 @@ DEFAULT_BASE_URL = "https://app.opensoftware.co/api"
 CONFIG_FILE_NAME = "os-platform.json"
 API_KEY_ENV = "OS_PLATFORM_API_KEY"
 BASE_URL_ENV = "OS_PLATFORM_API_BASE_URL"
+WORD_RE = re.compile(r"[a-z0-9]+")
 
 COMPACT_KEYS = {
     "id",
@@ -339,7 +341,104 @@ def compact_dict(value: Mapping[str, Any], *, limit: int, depth: int) -> dict[st
     return result
 
 
+def tokenize_search_text(value: Any) -> list[str]:
+    return WORD_RE.findall(str(value).lower())
+
+
+def issue_search_values(issue: Mapping[str, Any]) -> list[tuple[str, Any]]:
+    values: list[tuple[str, Any]] = []
+    fields = (
+        "external_id",
+        "number_in_org",
+        "number",
+        "title",
+        "body_markdown",
+        "body",
+        "type",
+        "priority",
+        "status",
+    )
+    for field in fields:
+        if issue.get(field) is not None:
+            values.append((field, issue[field]))
+
+    labels = issue.get("labels")
+    if isinstance(labels, list):
+        for label in labels:
+            if isinstance(label, Mapping):
+                values.extend(
+                    ("label", label[key])
+                    for key in ("slug", "name", "title")
+                    if label.get(key)
+                )
+            elif label:
+                values.append(("label", label))
+    return values
+
+
+def score_issue_for_query(issue: Mapping[str, Any], query: str) -> int:
+    query_text = query.strip().lower()
+    query_tokens = set(tokenize_search_text(query_text))
+    if not query_tokens:
+        return 0
+
+    score = 0
+    for field, raw_value in issue_search_values(issue):
+        value_text = str(raw_value).lower()
+        if field in {"external_id", "number_in_org", "number"}:
+            if query_text == value_text.strip():
+                score += 160
+            continue
+
+        value_tokens = set(tokenize_search_text(value_text))
+        matched_tokens = query_tokens & value_tokens
+        if not matched_tokens:
+            continue
+        weight = {
+            "external_id": 40,
+            "number_in_org": 40,
+            "number": 40,
+            "title": 12,
+            "body_markdown": 5,
+            "body": 5,
+            "label": 4,
+        }.get(field, 2)
+        score += len(matched_tokens) * weight
+        if query_text == value_text.strip():
+            score += weight * 3
+        elif query_text in value_text:
+            score += weight
+    return score
+
+
+def rank_issue_search_results(issues: Sequence[Any], query: str) -> list[Any]:
+    scored: list[tuple[int, int, Any]] = []
+    for index, issue in enumerate(issues):
+        if not isinstance(issue, Mapping):
+            continue
+        score = score_issue_for_query(issue, query)
+        if score > 0:
+            scored.append((score, index, issue))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [issue for _, _, issue in scored]
+
+
+def output_data_for_args(data: Any, args: argparse.Namespace) -> Any:
+    if getattr(args, "resource", None) != "issues" or getattr(args, "action", None) != "search":
+        return data
+
+    query = getattr(args, "search_query", "")
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        result = dict(data)
+        result["items"] = rank_issue_search_results(data["items"], query)
+        return result
+    if isinstance(data, list):
+        return rank_issue_search_results(data, query)
+    return data
+
+
 def print_payload(data: Any, args: argparse.Namespace) -> None:
+    data = output_data_for_args(data, args)
     if args.full or args.json:
         output = data
     else:
@@ -432,7 +531,9 @@ def command_to_request(args: argparse.Namespace) -> tuple[str, str, dict[str, An
 
     if args.resource == "issues":
         org = urllib.parse.quote(require_arg(args, "org", "org"))
-        if args.action == "list":
+        if args.action in {"list", "search"}:
+            if args.action == "search" and not getattr(args, "search_query", "").strip():
+                die("search query is required")
             query = query_from_args(
                 args,
                 [
@@ -527,6 +628,10 @@ def build_parser() -> argparse.ArgumentParser:
     issues_list = leaf_parser(issues_sub, "list", help="List Issues for an Org.")
     issues_list.add_argument("org", nargs="?")
     add_issue_filters(issues_list)
+    issues_search = leaf_parser(issues_sub, "search", help="Search Issues by local query relevance.")
+    issues_search.add_argument("org", nargs="?")
+    issues_search.add_argument("search_query")
+    add_issue_filters(issues_search)
     issues_show = leaf_parser(issues_sub, "show", help="Show one Issue by per-Org number.")
     issues_show.add_argument("refs", nargs="*", metavar="ref")
 

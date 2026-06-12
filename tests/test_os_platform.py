@@ -174,5 +174,117 @@ class ProjectConfigTest(unittest.TestCase):
         self.assertEqual(path, "/v1/orgs/open-software/bounties/123")
 
 
+class IssueSearchCommandTest(unittest.TestCase):
+    def setUp(self):
+        self.os_platform = load_os_platform()
+
+    def test_issues_search_builds_list_request_with_filters(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(
+            [
+                "issues",
+                "search",
+                "os-skill",
+                "existing issue",
+                "--status",
+                "todo",
+                "--assignee",
+                "none",
+            ]
+        )
+
+        self.os_platform.apply_project_config(args, {})
+
+        method, path, query = self.os_platform.command_to_request(args)
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/v1/orgs/os-skill/bounties")
+        self.assertEqual(query, {"status": "todo", "assignee": "none"})
+        self.assertEqual(args.search_query, "existing issue")
+
+    def test_issues_list_request_shape_stays_unchanged(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "list", "os-skill", "--status", "todo"])
+
+        self.os_platform.apply_project_config(args, {})
+
+        method, path, query = self.os_platform.command_to_request(args)
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/v1/orgs/os-skill/bounties")
+        self.assertEqual(query, {"status": "todo"})
+
+    def test_search_ranking_prefers_exact_external_id_matches(self):
+        issues = [
+            {"title": "Add wallet screen", "external_id": "OS2-9"},
+            {"title": "Unrelated work", "external_id": "OS2-2"},
+            {"title": "Search existing issue", "external_id": "OS2-3"},
+        ]
+
+        ranked = self.os_platform.rank_issue_search_results(issues, "OS2-2")
+
+        self.assertEqual([item["external_id"] for item in ranked], ["OS2-2"])
+
+    def test_search_ranking_prefers_exact_title_matches(self):
+        issues = [
+            {"title": "Existing issue follow-up", "external_id": "OS2-9"},
+            {"title": "Search existing issue", "external_id": "OS2-2"},
+            {"title": "Existing issue cleanup", "external_id": "OS2-3"},
+        ]
+
+        ranked = self.os_platform.rank_issue_search_results(issues, "Search existing issue")
+
+        self.assertEqual(ranked[0]["external_id"], "OS2-2")
+
+    def test_search_ranking_allows_relevant_body_to_beat_unrelated_title(self):
+        issues = [
+            {
+                "title": "Wallet polish",
+                "body_markdown": "Unrelated UI cleanup",
+                "external_id": "OS2-9",
+            },
+            {
+                "title": "Small helper change",
+                "body_markdown": "Search existing issue close to user query",
+                "external_id": "OS2-2",
+            },
+        ]
+
+        ranked = self.os_platform.rank_issue_search_results(issues, "search existing issue")
+
+        self.assertEqual(ranked[0]["external_id"], "OS2-2")
+
+    def test_search_ranking_omits_zero_score_issues(self):
+        issues = [
+            {"title": "Wallet polish", "body_markdown": "Payment cleanup"},
+            {"title": "Search existing issue", "body_markdown": "Find close matches"},
+        ]
+
+        ranked = self.os_platform.rank_issue_search_results(issues, "existing issue")
+
+        self.assertEqual([item["title"] for item in ranked], ["Search existing issue"])
+
+    def test_search_payload_is_ranked_before_printing(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "search", "os-skill", "existing issue"])
+        self.os_platform.apply_project_config(args, {})
+        payload = {
+            "items": [
+                {"title": "Wallet polish", "external_id": "OS2-9"},
+                {"title": "Search existing issue", "external_id": "OS2-2"},
+            ]
+        }
+
+        output = self.os_platform.output_data_for_args(payload, args)
+
+        self.assertEqual(output["items"][0]["external_id"], "OS2-2")
+
+    def test_empty_search_query_is_rejected(self):
+        parser = self.os_platform.build_parser()
+        args = parser.parse_args(["issues", "search", "os-skill", "   "])
+        self.os_platform.apply_project_config(args, {})
+
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.os_platform.command_to_request(args)
+
+
 if __name__ == "__main__":
     unittest.main()

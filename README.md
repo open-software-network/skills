@@ -30,6 +30,14 @@ production API instead of relying on stale docs, fixtures, or screenshots.
 It can read current Orgs, Projects, Issues, Submissions, Comments, Activity,
 Contributors, and API status.
 
+Example Issue commands:
+
+```bash
+python3 skills/os-platform/scripts/os_platform.py issues list open-software --status todo
+python3 skills/os-platform/scripts/os_platform.py issues search open-software "wallet bug" --status todo --assignee none
+python3 skills/os-platform/scripts/os_platform.py issues show open-software 123
+```
+
 ## Configuration
 
 The default API base URL is:

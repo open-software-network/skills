@@ -14,6 +14,7 @@ Run commands from this skill directory:
 ```bash
 python3 scripts/os_platform.py status
 python3 scripts/os_platform.py issues list open-software --q "wallet" --limit 10
+python3 scripts/os_platform.py issues search open-software "wallet bug" --status todo
 python3 scripts/os_platform.py issues show open-software 123
 ```
 
@@ -34,7 +35,8 @@ Use the user prompt first, then `os-platform.json`, then ask the user for missin
 
 - Org state or details: use `org get <org>`.
 - Project lists or details: use `projects list <org>` or `project get <org> <project>`.
-- Issue lists, searches, filters, or work queues: use `issues list <org>` with the narrowest filters.
+- Issue lists, filters, or work queues: use `issues list <org>` with the narrowest filters.
+- Issue searches by rough user phrasing: use `issues search <org> "<query>"` with narrow filters when useful.
 - A specific Issue/Bounty by number: use `issues show <org> <number>`.
 - Issue submissions, activity, or comments: use the scoped command with `<org>` and `<issue-number>`.
 - Contributors: use `contributors list <org>` or `contributors show <org> <user-handle>`.
@@ -65,6 +67,7 @@ python3 scripts/os_platform.py org get <org>
 python3 scripts/os_platform.py projects list <org>
 python3 scripts/os_platform.py project get <org> <project>
 python3 scripts/os_platform.py issues list <org>
+python3 scripts/os_platform.py issues search <org> "<query>"
 python3 scripts/os_platform.py issues show <org> <number>
 python3 scripts/os_platform.py submissions list <org> <issue-number>
 python3 scripts/os_platform.py activity list <org> <issue-number>
