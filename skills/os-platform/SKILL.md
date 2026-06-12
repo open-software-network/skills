@@ -41,6 +41,8 @@ Use the user prompt first, then `os-platform.json`, then ask the user for missin
 
 If the user asks for issues and omits org, read `os-platform.json`; if it has `org`, use it. If no org is available, ask the user which org to use before running the script.
 
+When the user asks for issues to work on, prioritize todo issues assigned to the user or with no assignee before other todo issues. If the user identity is unclear, prefer unassigned todo issues and ask which user handle to use for assigned work.
+
 ## Specific Issue Triage
 
 When the user asks about a specific issue, fetch the live issue first, then inspect the current local codebase before suggesting implementation work.

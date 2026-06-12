@@ -104,6 +104,7 @@ class InstallScriptRepositoryTest(unittest.TestCase):
         self.assertIn("## Routing Rules", skill)
         self.assertIn("Use the user prompt first, then `os-platform.json`, then ask the user for missing required parameters.", skill)
         self.assertIn("The script is a deterministic read-only tool; do not rely on it to decide user intent.", skill)
+        self.assertIn("When the user asks for issues to work on, prioritize todo issues assigned to the user or with no assignee before other todo issues.", skill)
         self.assertIn("When the user asks about a specific issue, fetch the live issue first, then inspect the current local codebase before suggesting implementation work.", skill)
         self.assertIn("Ground suggestions in both the issue data and code references; say when the codebase does not provide enough evidence.", skill)
 
