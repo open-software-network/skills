@@ -2,12 +2,20 @@
 
 Agent skills for working with Open Software.
 
+| Skill | What it does |
+|---|---|
+| [os-design](skills/os-design/SKILL.md) | Stand up design-featuring work the Open Software way: system-blocks-first, quiet by default |
+| [os-platform](skills/os-platform/SKILL.md) | Query live Open Software platform data through the production API |
+| [repo-build-pr](skills/repo-build-pr/SKILL.md) | End-to-end implementation loop: prompt to reviewed draft PR |
+
 ## Install
 
-Install the `os-platform` skill with the Skills CLI:
+Install a skill with the Skills CLI:
 
 ```bash
+npx skills add open-software-network/skills --skill os-design
 npx skills add open-software-network/skills --skill os-platform
+npx skills add open-software-network/skills --skill repo-build-pr
 ```
 
 Or install with the standalone script:
@@ -21,6 +29,33 @@ Or install from a local checkout:
 ```bash
 bash skills/os-platform/scripts/install.sh --source skills/os-platform --force
 ```
+
+## os-design
+
+`os-design` is the entry point for design-featuring work: it grounds agents
+in the repo's existing design system before any pixels, enforces composing
+from canonical blocks (token before value, primitive before bespoke), and
+carries the house taste - quiet by default, one-dial tuning, and the
+non-negotiables (no all caps, no tabular numerals, no typographic dashes).
+
+It routes to specialist design skills when they are installed (impeccable,
+emil-design-eng, make-interfaces-feel-better, transitions-dev, mobbin) under
+one rule - skills advise, the system decides - and is self-sufficient when
+they are not. References: `taste.md` (the full sensibility with shipped
+numbers), `workflow.md` (reference-driven standup, state-parking drivers,
+screenshot loop, handoff), `skill-map.md` (routing and the filter rule).
+
+The skill stops at handoff: it never commits, pushes, or opens a PR unless
+explicitly asked.
+
+## repo-build-pr
+
+`repo-build-pr` is the end-to-end implementation loop that takes a feature
+prompt, bug report, or tracker task id to a reviewed draft PR: clarify, plan,
+implement in an isolated worktree, validate with deterministic checks plus
+live app walkthroughs, attach QA evidence, and run the automated review loop
+with judgment. Authored in os-june, where it is also vendored; its repo
+specifics adapt per repo.
 
 ## os-platform
 
