@@ -1,11 +1,23 @@
 {
   "version": 1,
   "skills": {
+    "os-design": {
+      "source": "open-software-network/skills",
+      "sourceType": "github",
+      "skillPath": "skills/os-design/SKILL.md",
+      "computedHash": "ebe35bfb879d3bc10d7e21af4da43682be7e3387d9e51bddf526b81d47c48ca6"
+    },
     "os-platform": {
       "source": "open-software-network/skills",
       "sourceType": "github",
       "skillPath": "skills/os-platform/SKILL.md",
       "computedHash": "754e5f71979ec422e10e46060d1b6cf5d0da5a5617008329c0eddeb3a2c234ef"
+    },
+    "repo-build-pr": {
+      "source": "open-software-network/skills",
+      "sourceType": "github",
+      "skillPath": "skills/repo-build-pr/SKILL.md",
+      "computedHash": "494f24953098092791ab51d47a739fefd41744f7b4ed576588c9270536c33f9f"
     }
   }
 }
