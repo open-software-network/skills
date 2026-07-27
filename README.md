@@ -48,6 +48,10 @@ screenshot loop, handoff), `skill-map.md` (routing and the filter rule).
 The skill stops at handoff: it never commits, pushes, or opens a PR unless
 explicitly asked.
 
+os-design is authored and canonical in the os-june repo (its grounding is
+os-june's `docs/design/` and `spec/` rules); changes land there first and are
+mirrored here for installs.
+
 ## repo-build-pr
 
 `repo-build-pr` is the end-to-end implementation loop that takes a feature
